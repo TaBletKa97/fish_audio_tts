@@ -385,7 +385,6 @@ def process_tts_rules(editor, rules, selected_text):
 
     # 3. Update the note and UI on the main thread
     def on_done(future):
-        mw.progress.finish()
         try:
             results = future.result()
         except Exception as e:
@@ -400,8 +399,6 @@ def process_tts_rules(editor, rules, selected_text):
                 # Appending the sound tag prevents overwriting existing text
                 editor.note[dest] = f" [sound:{fname}]"
                 changes_made = True
-                av_player.play_file(path)
-                time.sleep(1)
             else:
                 err_msg = err
                 break
@@ -409,11 +406,14 @@ def process_tts_rules(editor, rules, selected_text):
         if changes_made:
             editor.loadNote()
             tooltip("Audio generated according to rules!", parent=editor.widget)
+            for success, err, path, dest, fname in results:
+                if success:
+                    av_player.insert_file(path)
         if err_msg:
             showWarning(err_msg)
 
-    mw.progress.start(label="Generating audio...")
     mw.taskman.run_in_background(bg_task, on_done)
+    tooltip("Generating audio in the background...", parent=editor.widget)
 
 
 def on_generate_tts(editor):
