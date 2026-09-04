@@ -6,8 +6,8 @@ Fish Audio TTS is an Anki add-on that generates high-quality text-to-speech audi
 
 Before generating audio, you must configure your Fish.Audio credentials. Navigate to **Tools -> Settings Fish TTS** from the main Anki window.
 
-*   **API key:** Your personal authorization token from the Fish.Audio dashboard.
-*   **Voice ID:** The default model ID (e.g., `s2.1-pro-free` or a custom reference ID) used when a specific rule does not define one.
+*   **API key:** Your personal authorization token from the Fish.Audio dashboard. (https://fish.audio/app/api-keys/)
+*   **Voice ID:** The default model ID used when a specific rule does not define one. (https://fish.audio/app/discovery/)
 
 ## Configuring Rules
 
