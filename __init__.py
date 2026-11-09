@@ -52,8 +52,8 @@ class FishSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings Fish TTS")
-        self.setMinimumWidth(600)
-        self.resize(650, 480)
+        self.setMinimumWidth(680)
+        self.resize(720, 480)
 
         # 1. Read current settings from config.json
         self.config = mw.addonManager.getConfig(__name__) or {}
@@ -96,9 +96,13 @@ class FishSettingsDialog(QDialog):
         saved_voices = self.config.get("random_voices", [])
         for v in saved_voices:
             if isinstance(v, dict):
-                self.add_voice_row(v.get("name", ""), v.get("id", ""))
+                self.add_voice_row(
+                    v.get("name", ""),
+                    v.get("id", ""),
+                    v.get("enabled", True),
+                )
             elif isinstance(v, str):
-                self.add_voice_row("", v)
+                self.add_voice_row("", v, True)
 
         self.voices_layout.addStretch()
 
@@ -109,10 +113,14 @@ class FishSettingsDialog(QDialog):
 
         self.setLayout(layout)
 
-    def add_voice_row(self, name="", voice_id=""):
+    def add_voice_row(self, name="", voice_id="", enabled=True):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 2, 0, 2)
+
+        enabled_cb = QCheckBox("Enabled")
+        enabled_cb.setChecked(enabled)
+        row_layout.addWidget(enabled_cb)
 
         row_layout.addWidget(QLabel("Name:"))
         name_input = QLineEdit(name)
@@ -131,6 +139,7 @@ class FishSettingsDialog(QDialog):
 
         row_data = {
             "widget": row_widget,
+            "enabled": enabled_cb,
             "name": name_input,
             "id": id_input,
         }
@@ -157,8 +166,9 @@ class FishSettingsDialog(QDialog):
         for row in self.voice_rows:
             name = row["name"].text().strip()
             vid = row["id"].text().strip()
+            enabled = row["enabled"].isChecked()
             if name or vid:
-                voices_list.append({"name": name, "id": vid})
+                voices_list.append({"name": name, "id": vid, "enabled": enabled})
         self.config["random_voices"] = voices_list
 
         mw.addonManager.writeConfig(__name__, self.config)
@@ -429,18 +439,19 @@ def process_tts_rules(editor, rules, selected_text):
     default_model_id = config.get("model_id", "")
     cached_changes = False
 
-    # Extract valid random voices
+    # Extract valid random voices (only enabled ones)
     random_voices = config.get("random_voices", [])
     valid_random_voice_ids = []
     for v in random_voices:
         if isinstance(v, dict):
-            vid = v.get("id", "").strip()
+            if v.get("enabled", True):
+                vid = v.get("id", "").strip()
+                if vid:
+                    valid_random_voice_ids.append(vid)
         elif isinstance(v, str):
             vid = v.strip()
-        else:
-            vid = ""
-        if vid:
-            valid_random_voice_ids.append(vid)
+            if vid:
+                valid_random_voice_ids.append(vid)
 
     task_data = []
     for rule in rules:
@@ -454,8 +465,8 @@ def process_tts_rules(editor, rules, selected_text):
         if use_random_voice:
             if not valid_random_voice_ids:
                 showWarning(
-                    "A rule has 'Use random voice' enabled, but the random voice list is empty.\n"
-                    "Please add voices in Tools -> Settings Fish TTS."
+                    "A rule has 'Use random voice' enabled, but there are no enabled voices in the random voice list.\n"
+                    "Please enable at least one voice in Tools -> Settings Fish TTS."
                 )
                 return
             final_model_id = random.choice(valid_random_voice_ids)
