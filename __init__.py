@@ -55,26 +55,26 @@ class FishSettingsDialog(QDialog):
         self.setMinimumWidth(600)
         self.resize(650, 480)
 
-        # 1. Читаем текущие настройки из config.json
+        # 1. Read current settings from config.json
         self.config = mw.addonManager.getConfig(__name__) or {}
         self.voice_rows = []
 
-        # 2. Создаем вертикальный контейнер для элементов
+        # 2. Create vertical container for elements
         layout = QVBoxLayout()
 
-        # 3. Добавляем поле для ключа
+        # 3. Add API key field
         layout.addWidget(QLabel("API key:"))
         self.api_input = QLineEdit(self.config.get("api_key", ""))
         layout.addWidget(self.api_input)
 
-        # 4. Добавляем поле для модели
+        # 4. Add model field
         layout.addWidget(QLabel("Voice ID (Default):"))
         self.model_input = QLineEdit(self.config.get("model_id", ""))
         layout.addWidget(self.model_input)
 
         layout.addSpacing(10)
 
-        # 5. Секция случайных голосов
+        # 5. Random voices section
         header_layout = QHBoxLayout()
         header_layout.addWidget(QLabel("<b>Random voice list</b>"))
         header_layout.addStretch()
@@ -84,7 +84,7 @@ class FishSettingsDialog(QDialog):
         header_layout.addWidget(add_voice_btn)
         layout.addLayout(header_layout)
 
-        # Scroll area для списка голосов
+        # Scroll area for voice list
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_content = QWidget()
@@ -92,7 +92,7 @@ class FishSettingsDialog(QDialog):
         self.scroll_area.setWidget(self.scroll_content)
         layout.addWidget(self.scroll_area)
 
-        # Загружаем сохраненные голоса
+        # Load saved voices
         saved_voices = self.config.get("random_voices", [])
         for v in saved_voices:
             if isinstance(v, dict):
@@ -102,7 +102,7 @@ class FishSettingsDialog(QDialog):
 
         self.voices_layout.addStretch()
 
-        # 6. Кнопка сохранения
+        # 6. Save button
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self.save_settings)
         layout.addWidget(save_btn)
@@ -149,7 +149,7 @@ class FishSettingsDialog(QDialog):
         row_data["widget"].deleteLater()
 
     def save_settings(self):
-        # Сохраняем то, что ввел пользователь, обратно в файл
+        # Save user inputs back to file
         self.config["api_key"] = self.api_input.text().strip()
         self.config["model_id"] = self.model_input.text().strip()
 
@@ -163,7 +163,7 @@ class FishSettingsDialog(QDialog):
 
         mw.addonManager.writeConfig(__name__, self.config)
 
-        # Закрываем окно
+        # Close dialog
         self.accept()
 
 
@@ -219,7 +219,7 @@ class FishRulesDialog(QDialog):
         # Fetch available field names for the current note type
         self.field_names = self.editor.note.keys()
 
-        # Сначала всегда создаем и добавляем надпись
+        # Create and add empty label first
         self.empty_label = QLabel("To add a rule, click '+ Add Rule'")
         self.rules_layout.addWidget(self.empty_label)
 
@@ -227,9 +227,9 @@ class FishRulesDialog(QDialog):
         saved_rules = config.get("rules", {}).get(self.note_type_name, [])
 
         if saved_rules:
-            # Если правила есть, скрываем надпись
+            # If rules exist, hide the label
             self.empty_label.hide()
-            # Отрисовываем сохраненные правила как полноценные элементы интерфейса
+            # Render saved rules as UI elements
             for rule in saved_rules:
                 self.add_rule_ui(
                     rule.get("source"),
@@ -371,7 +371,7 @@ class FishRulesDialog(QDialog):
 
 
 def show_rules_dialog(editor):
-    # editor.widget - это родительское окно редактора, чтобы наше окно было поверх него
+    # editor.widget is editor parent window so dialog stays on top
     dialog = FishRulesDialog(editor, parent=editor.widget)
     dialog.exec()
 
@@ -405,9 +405,9 @@ def fetch_audio(text, output_path, model_id):
     except urllib.error.URLError as e:
         # Reading error body, if server provided a text
         error_body = e.read().decode("utf-8") if hasattr(e, "read") else str(e)
-        return False, f"Ошибка API fish.audio: {error_body}"
+        return False, f"Fish.audio API error: {error_body}"
     except Exception as e:
-        return False, f"Внутренняя ошибка: {str(e)}"
+        return False, f"Internal error: {str(e)}"
 
 
 def process_tts_rules(editor, rules, selected_text):
@@ -467,14 +467,14 @@ def process_tts_rules(editor, rules, selected_text):
         if source_field not in note.keys() or dest_field not in note.keys():
             continue
 
-        # 2. Проверяем: стоит ли галочка И не пустой ли выделенный текст
+        # 2. Check: selection only checked AND selection is not empty
         if selection_only and selected_text.strip():
             clean_text = selected_text.strip()
         else:
-            # 3. Во всех остальных случаях используем текст поля целиком
+            # 3. Otherwise use the entire field text
             clean_text = strip_html(note[source_field]).strip()
 
-        # 4. Если в итоге текста нет вообще (поле пустое), переходим к следующему правилу
+        # 4. If field is empty, proceed to next rule
         if not clean_text:
             continue
 
@@ -504,13 +504,13 @@ def process_tts_rules(editor, rules, selected_text):
 
     if not task_data:
         if cached_changes:
-            # Аудио было на диске, но тега в поле не было (мы его добавили)
+            # Audio was already on disk, but sound tag was missing from the field (added it)
             editor.loadNote()
             tooltip(
                 "Audio loaded from local cache (API skipped)!", parent=editor.widget
             )
         else:
-            # Аудио на диске И тег уже прописан в поле (ничего менять не нужно)
+            # Audio is on disk AND sound tag already exists in field (nothing to change)
             tooltip(
                 "Audio already exists in the field (Skipped)!", parent=editor.widget
             )
@@ -573,8 +573,8 @@ def on_generate_tts(editor):
         showWarning(f"No rules found for '{note_type_name}'. Click 🐟⚙️ to add rules.")
         return
 
-    # Запрашиваем выделенный текст через JavaScript.
-    # Когда браузер вернет текст, он автоматически передаст его в process_tts_rules
+    # Request selected text via JavaScript.
+    # When browser returns text, it is passed to process_tts_rules
     editor.web.evalWithCallback(
         "window.getSelection().toString();",
         lambda sel: process_tts_rules(editor, rules, sel),
@@ -582,12 +582,12 @@ def on_generate_tts(editor):
 
 
 def setup_buttons(buttons, editor):
-    # Add generate button in redactor
+    # Add generate button in editor
     btn = editor.addButton(
         icon=None,
         cmd="fish_tts",
         func=lambda editor=editor: on_generate_tts(editor),
-        tip="Сгенерировать TTS через Fish.Audio (Ctrl+Shift+F)",
+        tip="Generate TTS via Fish.Audio (Ctrl+Shift+F)",
         keys="Ctrl+Shift+F",
         label="🐟",
     )
@@ -607,5 +607,5 @@ def setup_buttons(buttons, editor):
     return buttons
 
 
-# Registrating button in redactor
+# Register buttons in editor
 gui_hooks.editor_did_init_buttons.append(setup_buttons)
