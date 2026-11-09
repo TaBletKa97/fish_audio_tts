@@ -8,7 +8,7 @@ Before generating audio, you must configure your Fish.Audio credentials. Navigat
 
 *   **API key:** Your personal authorization token from the Fish.Audio dashboard. (https://fish.audio/app/api-keys/)
 *   **Voice ID:** The default model ID used when a specific rule does not define one. (https://fish.audio/app/discovery/)
-*   **Random voice list:** A list of voices (with voice name/comment and Voice ID) used when a rule has 'Use random voice' enabled.
+*   **Random voice list:** A list of voices (with 'Enabled' checkbox, voice name/comment, and Voice ID) used when a rule has 'Use random voice' enabled. Disabled voices are kept in your list for future use without being picked during random generation.
 
 ## Configuring Rules
 
