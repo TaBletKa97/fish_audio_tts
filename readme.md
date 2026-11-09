@@ -8,6 +8,7 @@ Before generating audio, you must configure your Fish.Audio credentials. Navigat
 
 *   **API key:** Your personal authorization token from the Fish.Audio dashboard. (https://fish.audio/app/api-keys/)
 *   **Voice ID:** The default model ID used when a specific rule does not define one. (https://fish.audio/app/discovery/)
+*   **Random voice list:** A list of voices (with voice name/comment and Voice ID) used when a rule has 'Use random voice' enabled.
 
 ## Configuring Rules
 
@@ -20,6 +21,7 @@ Rules are tied to specific Note Types (e.g., Basic, Cloze). In the Anki card edi
 | **Selection only** | If checked, the add-on only reads the text currently highlighted by the user. If the highlight is empty, it falls back to reading the entire source field. |
 | **Emotion** | Prepends a specific emotional modifier to the text prompt. Supported emotions include *happy, sad, angry, excited, calm, nervous, confident, surprised, satisfied, delighted, scared, worried, upset, frustrated, depressed, empathetic, embarrassed, disgusted, moved, proud, relaxed, grateful, curious, and sarcastic*. |
 | **Custom Voice** | An optional Voice ID that overrides the global default voice for this specific rule. |
+| **Use random voice** | If checked, picks a random voice from your configured Random voice list for each request of this rule. |
 
 ## Generating Audio
 

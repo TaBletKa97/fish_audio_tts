@@ -1,15 +1,23 @@
 import hashlib
+import html
 import json
 import os
+import random
+import re
 import time
 import urllib.error
 import urllib.request
 
-from anki.utils import strip_html
 from aqt import gui_hooks, mw
 from aqt.qt import *
 from aqt.sound import av_player
 from aqt.utils import showInfo, showWarning, tooltip
+
+
+def strip_html(text):
+    """Return text with HTML tags removed and entities decoded."""
+    return html.unescape(re.sub(r"<[^>]+>", "", text))
+
 
 EMOTIONS = [
     "happy",
@@ -44,9 +52,12 @@ class FishSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings Fish TTS")
+        self.setMinimumWidth(600)
+        self.resize(650, 480)
 
         # 1. Читаем текущие настройки из config.json
         self.config = mw.addonManager.getConfig(__name__) or {}
+        self.voice_rows = []
 
         # 2. Создаем вертикальный контейнер для элементов
         layout = QVBoxLayout()
@@ -57,21 +68,99 @@ class FishSettingsDialog(QDialog):
         layout.addWidget(self.api_input)
 
         # 4. Добавляем поле для модели
-        layout.addWidget(QLabel("Voice ID:"))
+        layout.addWidget(QLabel("Voice ID (Default):"))
         self.model_input = QLineEdit(self.config.get("model_id", ""))
         layout.addWidget(self.model_input)
 
-        # 5. Кнопка сохранения
+        layout.addSpacing(10)
+
+        # 5. Секция случайных голосов
+        header_layout = QHBoxLayout()
+        header_layout.addWidget(QLabel("<b>Random voice list</b>"))
+        header_layout.addStretch()
+
+        add_voice_btn = QPushButton("+ Add voice to list")
+        add_voice_btn.clicked.connect(lambda: self.add_voice_row())
+        header_layout.addWidget(add_voice_btn)
+        layout.addLayout(header_layout)
+
+        # Scroll area для списка голосов
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_content = QWidget()
+        self.voices_layout = QVBoxLayout(self.scroll_content)
+        self.scroll_area.setWidget(self.scroll_content)
+        layout.addWidget(self.scroll_area)
+
+        # Загружаем сохраненные голоса
+        saved_voices = self.config.get("random_voices", [])
+        for v in saved_voices:
+            if isinstance(v, dict):
+                self.add_voice_row(v.get("name", ""), v.get("id", ""))
+            elif isinstance(v, str):
+                self.add_voice_row("", v)
+
+        self.voices_layout.addStretch()
+
+        # 6. Кнопка сохранения
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self.save_settings)
         layout.addWidget(save_btn)
 
         self.setLayout(layout)
 
+    def add_voice_row(self, name="", voice_id=""):
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 2, 0, 2)
+
+        row_layout.addWidget(QLabel("Name:"))
+        name_input = QLineEdit(name)
+        name_input.setPlaceholderText("Voice name / comment")
+        row_layout.addWidget(name_input)
+
+        row_layout.addWidget(QLabel("Voice ID:"))
+        id_input = QLineEdit(voice_id)
+        id_input.setPlaceholderText("Model ID")
+        row_layout.addWidget(id_input)
+
+        del_btn = QPushButton("❌")
+        del_btn.setStyleSheet("min-width: 30px; padding: 2px 6px;")
+        del_btn.setToolTip("Delete voice")
+        row_layout.addWidget(del_btn)
+
+        row_data = {
+            "widget": row_widget,
+            "name": name_input,
+            "id": id_input,
+        }
+        del_btn.clicked.connect(lambda: self.delete_voice_row(row_data))
+        self.voice_rows.append(row_data)
+
+        count = self.voices_layout.count()
+        if count > 0 and self.voices_layout.itemAt(count - 1).spacerItem():
+            self.voices_layout.insertWidget(count - 1, row_widget)
+        else:
+            self.voices_layout.addWidget(row_widget)
+
+    def delete_voice_row(self, row_data):
+        if row_data in self.voice_rows:
+            self.voice_rows.remove(row_data)
+        row_data["widget"].deleteLater()
+
     def save_settings(self):
         # Сохраняем то, что ввел пользователь, обратно в файл
         self.config["api_key"] = self.api_input.text().strip()
         self.config["model_id"] = self.model_input.text().strip()
+
+        voices_list = []
+        for row in self.voice_rows:
+            name = row["name"].text().strip()
+            vid = row["id"].text().strip()
+            if name or vid:
+                voices_list.append({"name": name, "id": vid})
+        self.config["random_voices"] = voices_list
+
         mw.addonManager.writeConfig(__name__, self.config)
 
         # Закрываем окно
@@ -101,19 +190,23 @@ class FishRulesDialog(QDialog):
         self.note_type_name = editor.note.model()["name"]
 
         self.setWindowTitle(f"Rules Fish TTS: {self.note_type_name}")
-        self.setMinimumWidth(800)
+        self.setMinimumWidth(920)
 
         self.main_layout = QVBoxLayout()
 
-        # Container for all rule rows
-        self.rules_layout = QVBoxLayout()
-        self.main_layout.addLayout(self.rules_layout)
+        # Scroll area for rule rows
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        rules_container = QWidget()
+        self.rules_layout = QVBoxLayout(rules_container)
+        scroll.setWidget(rules_container)
+        self.main_layout.addWidget(scroll)
 
         # Controls: Add Rule & Save buttons
         btn_layout = QHBoxLayout()
 
         self.add_btn = QPushButton("+ Add Rule")
-        self.add_btn.clicked.connect(self.add_rule_ui)
+        self.add_btn.clicked.connect(lambda: self.add_rule_ui())
         btn_layout.addWidget(self.add_btn)
 
         self.save_btn = QPushButton("Save Rules")
@@ -144,6 +237,7 @@ class FishRulesDialog(QDialog):
                     rule.get("selection_only", False),
                     rule.get("emotion", ""),
                     rule.get("custom_voice", ""),
+                    rule.get("use_random_voice", False),
                 )
 
         self.rules_layout.addStretch()
@@ -155,7 +249,12 @@ class FishRulesDialog(QDialog):
         selection_val=False,
         emotion_val="",
         custom_voice_val="",
+        use_random_voice_val=False,
+        *args,
     ):
+        if not isinstance(source_val, str):
+            source_val = None
+
         self.empty_label.hide()
 
         """Creates a new horizontal row with rule settings"""
@@ -199,6 +298,20 @@ class FishRulesDialog(QDialog):
             custom_voice_input.setText(custom_voice_val)
         row_layout.addWidget(custom_voice_input)
 
+        # 6. Checkbox: Use random voice
+        random_voice_cb = QCheckBox("Use random voice")
+        if use_random_voice_val:
+            random_voice_cb.setChecked(True)
+            custom_voice_input.setEnabled(False)
+        random_voice_cb.toggled.connect(
+            lambda checked, inp=custom_voice_input: inp.setEnabled(not checked)
+        )
+        row_layout.addWidget(random_voice_cb)
+
+        # 7. Delete Button
+        delete_btn = QPushButton("🗑️")
+        row_layout.addWidget(delete_btn)
+
         row_data = {
             "layout": row_layout,
             "source": source_combo,
@@ -206,13 +319,11 @@ class FishRulesDialog(QDialog):
             "selection_only": selection_cb,
             "emotion": emotions_combo,
             "custom_voice": custom_voice_input,
+            "use_random_voice": random_voice_cb,
         }
         self.rule_widgets.append(row_data)
 
-        # 5. Delete Button
-        delete_btn = QPushButton("🗑️")
         delete_btn.clicked.connect(lambda: self.delete_row(row_data))
-        row_layout.addWidget(delete_btn)
 
         count = self.rules_layout.count()
         if count > 0 and self.rules_layout.itemAt(count - 1).spacerItem():
@@ -231,6 +342,9 @@ class FishRulesDialog(QDialog):
                 child.widget().deleteLater()
         layout.deleteLater()
 
+        if not self.rule_widgets:
+            self.empty_label.show()
+
     def save_rules(self):
         config = mw.addonManager.getConfig(__name__) or {}
         if "rules" not in config:
@@ -244,7 +358,8 @@ class FishRulesDialog(QDialog):
                 "dest": row["dest"].currentText(),
                 "selection_only": row["selection_only"].isChecked(),
                 "emotion": row["emotion"].currentText(),
-                "custom_voice": row["custom_voice"].text(),
+                "custom_voice": row["custom_voice"].text().strip(),
+                "use_random_voice": row["use_random_voice"].isChecked(),
             }
             rules_list.append(rule)
 
@@ -314,6 +429,19 @@ def process_tts_rules(editor, rules, selected_text):
     default_model_id = config.get("model_id", "")
     cached_changes = False
 
+    # Extract valid random voices
+    random_voices = config.get("random_voices", [])
+    valid_random_voice_ids = []
+    for v in random_voices:
+        if isinstance(v, dict):
+            vid = v.get("id", "").strip()
+        elif isinstance(v, str):
+            vid = v.strip()
+        else:
+            vid = ""
+        if vid:
+            valid_random_voice_ids.append(vid)
+
     task_data = []
     for rule in rules:
         source_field = rule.get("source")
@@ -321,7 +449,20 @@ def process_tts_rules(editor, rules, selected_text):
         emotion = rule.get("emotion", "")
         selection_only = rule.get("selection_only", False)
         custom_voice = rule.get("custom_voice", "").strip()
-        final_model_id = custom_voice if custom_voice else default_model_id
+        use_random_voice = rule.get("use_random_voice", False)
+
+        if use_random_voice:
+            if not valid_random_voice_ids:
+                showWarning(
+                    "A rule has 'Use random voice' enabled, but the random voice list is empty.\n"
+                    "Please add voices in Tools -> Settings Fish TTS."
+                )
+                return
+            final_model_id = random.choice(valid_random_voice_ids)
+        elif custom_voice:
+            final_model_id = custom_voice
+        else:
+            final_model_id = default_model_id
 
         if source_field not in note.keys() or dest_field not in note.keys():
             continue
@@ -340,7 +481,12 @@ def process_tts_rules(editor, rules, selected_text):
         if emotion:
             clean_text = f"[{emotion}] {clean_text}"
 
-        hash_text = hashlib.md5(clean_text.encode("utf-8")).hexdigest()[:16]
+        hash_payload = (
+            f"{clean_text}_{final_model_id}"
+            if (use_random_voice or custom_voice)
+            else clean_text
+        )
+        hash_text = hashlib.md5(hash_payload.encode("utf-8")).hexdigest()[:16]
         filename = f"fish_audio_{hash_text}.mp3"
         media_dir = mw.col.media.dir()
         output_path = os.path.join(media_dir, filename)
